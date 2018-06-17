@@ -1,0 +1,18 @@
+mail_accounts:
+
+    account1:
+        host: imap.gmail.com
+        user: luke@skywalker.net
+        pass: use_the_f0rz_dude
+
+filter_rules:
+
+    rule1:
+        match_rule: aaa
+        dest_folder: bbb
+
+    rule2:
+        match_rule: ccc
+        dest_folder: ddd
+
+## END ##
