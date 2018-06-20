@@ -36,14 +36,12 @@ class MailSession:
 
     def email_addr_match(self, actual, needed):
 
-        if actual == needed:
-            return True
-
-        return re.search('<' + needed + '>', actual, flags = re.IGNORECASE)
+        return (actual == needed) or re.search('<' + needed + '>', actual, re.I)
 
     def attachment_match(self, msgpart, suffix, mask):
 
-        if not msgpart.get_content_maintype() == 'application':
+        typ = msgpart.get_content_maintype()
+        if typ != 'application' and not re.search('^application/', typ, re.I):
             return False
 
         fname = msgpart.get_filename()
@@ -53,10 +51,18 @@ class MailSession:
         if not re.search('.' + suffix + '$', fname, flags = re.IGNORECASE):
             return False
 
-        if isinstance(mask, str):  # ..str or int
+        if isinstance(mask, str):  # ..can be str or int
             return re.search(mask, fname, re.IGNORECASE)
 
         return True
+
+    def any_attachment_match(self, msg, suffix, mask):
+
+        for part in msg.walk():
+            if self.attachment_match(part, suffix, mask):
+                return True  # ..found
+
+        return False  # ..not found
 
     def try_rule(self, msg, rule):
         """
@@ -68,12 +74,8 @@ class MailSession:
         if not self.email_addr_match(msg['From'], rule['from']):
             return False
 
-        a = False
-
-        for part in msg.walk():
-            a = a or self.attachment_match(part, rule['suffix'], rule['mask'])
-
-        if not a: return False
+        if not self.any_attachment_match(msg, rule['suffix'], rule['mask']):
+            return False
 
         print '%s - %s => %s' % ( msg['From'], msg['Subject'], rule['name'] )
 
