@@ -20,18 +20,33 @@ class MailSession:
     def read_folder(self, folder_name = 'INBOX'):
         #pprint(self.session.list())  # ..rv, folders
         self.session.select(folder_name)
-        rv, msgids = self.session.search(None, 'ALL')
-        return msgids[0].split()  #..string containing numeric ids => return as array
 
-    def try_rule(self, msgid, rule):
+        rv, msgids = self.session.search(None, 'ALL')
+        msgids = msgids[0].split()  #..string containing numeric ids => return as array
+        msgs = []
+
+        for msgid in msgids:
+            rv,data = self.session.fetch(msgid, '(RFC822)')
+            txt = data[0][1]
+            msg = email.message_from_string(txt)
+            msgs.append(msg);
+
+        for msg in msgs:
+            print msg['Subject']
+            for part in msg.walk():
+                print "\tContent-type = %s, filename = %s" % ( part.get_content_maintype(), part.get_filename() )
+
+        return msgs
+
+    def try_rule(self, msg, rule):
         """
         Try to match message against rule.
         On success, move message to IMAP folder selected by rule, and return True.
         Otherwise return False.
         """
 
-        print("msgid = %s, name = %s, rule = %s, dest = %s"
-                % ( msgid, rule['name'], rule['match_rule'], rule['dest_folder'] ))
+        #print("msg = %s, name = %s, rule = %s, dest = %s"
+        #        % ( msg['Subject'], rule['name'], rule['match_rule'], rule['dest_folder'] ))
         # ???
         return True
 
@@ -86,10 +101,10 @@ class ImapMover:
 
         for account in self.mail_accounts:
             session = MailSession(account)
-            msgids = session.read_folder()
-            for msgid in msgids:
+            msgs = session.read_folder()
+            for msg in msgs:
                 for rule in self.filter_rules:
-                    if session.try_rule(msgid, rule):
+                    if session.try_rule(msg, rule):
                         break  #..skip remaining rules
 
 def main():
