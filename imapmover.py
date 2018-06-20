@@ -2,6 +2,7 @@
 
 from pprint import pprint
 
+import re
 import os
 import sys
 import yaml
@@ -31,12 +32,31 @@ class MailSession:
             msg = email.message_from_string(txt)
             msgs.append(msg);
 
-        for msg in msgs:
-            print msg['Subject']
-            for part in msg.walk():
-                print "\tContent-type = %s, filename = %s" % ( part.get_content_maintype(), part.get_filename() )
-
         return msgs
+
+    def email_addr_match(self, actual, needed):
+
+        if actual == needed:
+            return True
+
+        return re.search('<' + needed + '>', actual, flags = re.IGNORECASE)
+
+    def attachment_match(self, msgpart, suffix, mask):
+
+        if not msgpart.get_content_maintype() == 'application':
+            return False
+
+        fname = msgpart.get_filename()
+        if not fname:
+            return False
+
+        if not re.search('.' + suffix + '$', fname, flags = re.IGNORECASE):
+            return False
+
+        if isinstance(mask, str):  # ..str or int
+            return re.search(mask, fname, re.IGNORECASE)
+
+        return True
 
     def try_rule(self, msg, rule):
         """
@@ -45,9 +65,20 @@ class MailSession:
         Otherwise return False.
         """
 
-        #print("msg = %s, name = %s, rule = %s, dest = %s"
-        #        % ( msg['Subject'], rule['name'], rule['match_rule'], rule['dest_folder'] ))
-        # ???
+        if not self.email_addr_match(msg['From'], rule['from']):
+            return False
+
+        a = False
+
+        for part in msg.walk():
+            a = a or self.attachment_match(part, rule['suffix'], rule['mask'])
+
+        if not a: return False
+
+        print '%s - %s => %s' % ( msg['From'], msg['Subject'], rule['name'] )
+
+        # !!! todo: save it ???
+
         return True
 
 class ImapMover:
@@ -94,8 +125,8 @@ class ImapMover:
         fd = open(cfgfile, 'r')
         cfg = yaml.load(fd)
 
-        self.mail_accounts = self.read_section(cfgfile, cfg, 'mail_accounts', ['host','user','pass'      ])
-        self.filter_rules  = self.read_section(cfgfile, cfg, 'filter_rules' , ['match_rule','dest_folder'])
+        self.mail_accounts = self.read_section(cfgfile, cfg, 'mail_accounts', ['host','user','pass'])
+        self.filter_rules  = self.read_section(cfgfile, cfg, 'filter_rules' , ['from','suffix','mask','dest_folder'])
 
     def run(self):
 
