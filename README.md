@@ -23,4 +23,6 @@
 * https://gist.github.com/robulouski/7441883
 * https://eax.me/python-imap/
 * https://docs.python.org/2/library/imaplib.html
+* https://islascruz.org/blog/2017/01/27/attachments-python-imap/
+* http://code.activestate.com/recipes/302086-strip-attachments-from-an-email-message/
 * StackOverflow :-)
