@@ -5,14 +5,17 @@ from pprint import pprint
 import re
 import os
 import sys
+import time
 import yaml
 import imaplib
 import email
 import email.header
+import email.utils
 
 class MailSession:
 
     session = None
+    MASKLEN = 5
 
     def __init__(self, account):
         self.session = imaplib.IMAP4_SSL(account['host'])
@@ -22,7 +25,7 @@ class MailSession:
         #pprint(self.session.list())  # ..rv, folders
         self.session.select(folder_name)
 
-        rv, msgids = self.session.search(None, 'ALL')
+        rv, msgids = self.session.search(None, '(UNSEEN)')
         msgids = msgids[0].split()  #..string containing numeric ids => return as array
         msgs = []
 
@@ -30,6 +33,7 @@ class MailSession:
             rv,data = self.session.fetch(msgid, '(RFC822)')
             txt = data[0][1]
             msg = email.message_from_string(txt)
+            msg.__setitem__('__MSGID__', msgid)
             msgs.append(msg);
 
         return msgs
@@ -54,7 +58,10 @@ class MailSession:
         if isinstance(mask, str):  # ..can be str or int
             return re.search(mask, fname, re.IGNORECASE)
 
-        return True
+        if isinstance(mask, int):
+            return len(fname) >= (mask + self.MASKLEN - 1)
+
+        return False
 
     def any_attachment_match(self, msg, suffix, mask):
 
@@ -63,6 +70,26 @@ class MailSession:
                 return True  # ..found
 
         return False  # ..not found
+
+    def build_filename_suffix(self, msgpart):
+
+        t = msgpart.get_content_type()
+        if t == 'text/plain' : return 'txt'
+        if t == 'text/html'  : return 'html'
+        return 'bin'
+
+    def build_dirname(self, msgsubj, mask):
+
+        if isinstance(mask,str):
+            return mask
+        if isinstance(mask,int):
+            if mask <= 0: mask = 0
+            return msgsubj[mask - 1 : mask + self.MASKLEN - 1]
+
+    def build_timestamp(self, datetimestr, format = '%Y-%m-%d-%H%M%S'):
+
+        parsed = email.utils.parsedate(datetimestr)
+        return time.strftime(format, parsed) if parsed else time.strftime(format)
 
     def try_rule(self, msg, rule):
         """
@@ -79,7 +106,36 @@ class MailSession:
 
         print '%s - %s => %s' % ( msg['From'], msg['Subject'], rule['name'] )
 
-        # !!! todo: save it ???
+        msgdir = rule['destdir'] if 'destdir' in rule else self.build_dirname(msg['Subject'], rule['mask'])
+        try:
+            os.makedirs(msgdir)
+        except OSError as e:
+            if e.errno != errno.EEXIST: raise
+
+        n = 0
+        for part in msg.walk():
+
+            data = part.get_payload(decode=True)
+            if not data:   # ..skip multipart/mixed or multipart/alternative
+                continue
+
+            filename = part.get_filename()
+            if not filename:
+                n = n + 1
+                filename = "part%d.%s" % ( n, self.build_filename_suffix(part) )
+            filename = '%s__%s' % ( self.build_timestamp(msg['Date']), filename )
+
+            filepath = os.path.join(msgdir, filename)
+            if os.path.exists(filepath):
+                continue
+            try:
+                f = open(filepath, 'w')
+                f.write(data)
+                f.close
+            except OSError as e:
+                print(e)
+
+        self.session.store(msg['__MSGID__'], '+FLAGS', '\\Flagged')
 
         return True
 
