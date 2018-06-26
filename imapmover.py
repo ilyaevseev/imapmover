@@ -104,9 +104,9 @@ class MailSession:
         if not self.any_attachment_match(msg, rule['suffix'], rule['mask']):
             return False
 
-        print '%s - %s => %s' % ( msg['From'], msg['Subject'], rule['name'] )
+        #print '%s - %s => %s' % ( msg['From'], msg['Subject'], rule['name'] )
 
-        msgdir = rule['destdir'] if 'destdir' in rule else self.build_dirname(msg['Subject'], rule['mask'])
+        msgdir = rule['dest_folder'] if 'dest_folder' in rule else self.build_dirname(msg['Subject'], rule['mask'])
         try:
             os.makedirs(msgdir)
         except OSError as e:
