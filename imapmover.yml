@@ -13,6 +13,5 @@ filter_rules:
         from: larry.page@gmail.com
         suffix: pDf
         mask: 18-06
-        dest_folder: Pdf
 
 ## END ##
