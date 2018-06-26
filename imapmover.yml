@@ -7,12 +7,12 @@ mail_accounts:
 
 filter_rules:
 
-    rule1:
-        match_rule: aaa
-        dest_folder: bbb
+    rule1: { from: sergey.brin@gmail.com, suffix: zip, mask: 1, dest_folder: Zip }
 
     rule2:
-        match_rule: ccc
-        dest_folder: ddd
+        from: larry.page@gmail.com
+        suffix: pDf
+        mask: 18-06
+        dest_folder: Pdf
 
 ## END ##
