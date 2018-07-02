@@ -12,6 +12,50 @@ import email
 import email.header
 import email.utils
 
+class Destination:
+    pass
+
+class LocalDestination(Destination):
+
+    topdir = '.'
+
+    def __init__(self, args = None, hint = None):
+        topdir = args['top'] if (args and ('top' in args)) else '.'
+        self.topdir = os.getcwd() if (not topdir or topdir == '.') else topdir
+
+    def path2full(self, path):
+        p = path[1:] if path[0] == os.sep else path
+        return os.path.join(self.topdir, p)
+
+    def mkdir(self, dirpath):
+        try:
+            os.makedirs(self.path2full(dirpath))
+        except OSError as e:
+            if e.errno != errno.EEXIST: raise
+
+    def putfile(self, filepath, data):
+
+        p = self.path2full(filepath)
+        if os.path.exists(p): return False
+
+        f = open(p, 'wb')
+        f.write(data)
+        f.close
+
+class DropboxDestination(Destination):
+
+    token = None
+    topdir = '/'
+
+    def __init__(self, args, hint):
+        pass
+
+    def mkdir(self, dirpath):
+        pass
+
+    def putfile(self, filepath, data):
+        pass
+
 class MailSession:
 
     session = None
@@ -91,7 +135,18 @@ class MailSession:
         parsed = email.utils.parsedate(datetimestr)
         return time.strftime(format, parsed) if parsed else time.strftime(format)
 
-    def try_rule(self, msg, rule):
+    def get_destination(self, rule, destinations):
+
+        if not destinations or not 'destination' in rule:
+            return LocalDestination()
+
+        destname = rule['destination']
+        if not destname in destinations:
+            raise LookupError("rule contains unknown destination \"%s\"" % (destname))
+
+        return destinations[destname]
+
+    def try_rule(self, msg, rule, destinations):
         """
         Try to match message against rule.
         On success, move message to IMAP folder selected by rule, and return True.
@@ -107,10 +162,9 @@ class MailSession:
         #print '%s - %s => %s' % ( msg['From'], msg['Subject'], rule['name'] )
 
         msgdir = rule['dest_folder'] if 'dest_folder' in rule else self.build_dirname(msg['Subject'], rule['mask'])
-        try:
-            os.makedirs(msgdir)
-        except OSError as e:
-            if e.errno != errno.EEXIST: raise
+
+        dest = self.get_destination(rule, destinations)
+        dest.mkdir(msgdir)
 
         n = 0
         for part in msg.walk():
@@ -125,15 +179,7 @@ class MailSession:
                 filename = "part%d.%s" % ( n, self.build_filename_suffix(part) )
             filename = '%s__%s' % ( self.build_timestamp(msg['Date']), filename )
 
-            filepath = os.path.join(msgdir, filename)
-            if os.path.exists(filepath):
-                continue
-            try:
-                f = open(filepath, 'w')
-                f.write(data)
-                f.close
-            except OSError as e:
-                print(e)
+            dest.putfile(os.path.join(msgdir, filename), data)
 
         self.session.store(msg['__MSGID__'], '+FLAGS', '\\Flagged')
 
@@ -143,6 +189,7 @@ class ImapMover:
 
     mail_accounts = []
     filter_rules  = []
+    destinations  = []
 
     def read_section(self, cfgfile, cfg, section_name, required_fields):
 
@@ -178,6 +225,38 @@ class ImapMover:
 
         return result
 
+    def read_destinations(self, cfgfile, cfg):
+
+        secname = 'destinations'
+        if not secname in cfg:
+            return False
+
+        destinations = cfg[secname]
+        if not isinstance(destinations, dict):
+            raise TypeError("wrong section \"%s\" in \"%s\"" % ( secname, cfgfile ))
+
+        result = {}
+
+        for destname in destinations:
+
+            dest = destinations[destname]
+            hint = "\"%s\" in \"%s\" in \"%s\"" % ( destname, secname, cfgfile )
+
+            if not isinstance(dest, dict):
+                raise TypeError("wrong section " + hint)
+            if not 'type' in dest:
+                raise LookupError("missing type in " + hint)
+
+            typ = dest['type']
+            if typ == 'local':
+                result[destname] = LocalDestination(dest, hint)
+            elif typ == 'dropbox':
+                result[destname] = DropboxDestination(dest, hint)
+            else:
+                raise ValueError("invalid type \"%s\" in %s" % (typ, hint))
+
+        return result
+
     def read_config(self, cfgfile):
 
         fd = open(cfgfile, 'r')
@@ -185,6 +264,7 @@ class ImapMover:
 
         self.mail_accounts = self.read_section(cfgfile, cfg, 'mail_accounts', ['host','user','pass'])
         self.filter_rules  = self.read_section(cfgfile, cfg, 'filter_rules' , ['from','suffix','mask','dest_folder'])
+        self.destinations  = self.read_destinations(cfgfile, cfg)
 
     def run(self):
 
@@ -193,7 +273,7 @@ class ImapMover:
             msgs = session.read_folder()
             for msg in msgs:
                 for rule in self.filter_rules:
-                    if session.try_rule(msg, rule):
+                    if session.try_rule(msg, rule, self.destinations):
                         break  #..skip remaining rules
 
 def main():
