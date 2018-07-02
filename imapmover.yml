@@ -1,3 +1,12 @@
+destinations:
+
+    dir1: { type: local, top: /tmp }
+
+    dropbox1:
+        type: dropbox
+        token: 1234567890ABCDEFGHIJK0_asdfghjklqwertyuiopZXCVBNM1234567890qwert
+        top: /
+
 mail_accounts:
 
     account1:
@@ -7,11 +16,15 @@ mail_accounts:
 
 filter_rules:
 
+    rule0: { from: bill.gates@apple.com,  suffix: zip, mask: 1, dest_folder: Bill, destination: dir1 }
+
     rule1: { from: sergey.brin@gmail.com, suffix: zip, mask: 1, dest_folder: Zip }
 
     rule2:
         from: larry.page@gmail.com
         suffix: pDf
         mask: 18-06
+        destination: dropbox1
+        dest_folder: larry-emails
 
 ## END ##
