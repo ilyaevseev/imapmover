@@ -5,6 +5,7 @@ from pprint import pprint
 import re
 import os
 import sys
+import errno
 import time
 import yaml
 import imaplib
@@ -54,14 +55,14 @@ class LocalDestination(Destination):
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-            Log.verbose(4, "Local directory already exist: " + p)
+            Log.verbose(6, "Local directory already exist: " + p)
 
     def putfile(self, filepath, data):
 
         p = self.path2full(filepath)
 
         if os.path.exists(p):
-            Log.verbose(2, "Local file already exist, skipped: " + filepath)
+            Log.verbose(1, "Local file already exist, skipped: " + filepath)
             return False
 
         Log.verbose(2, "Write local file: " + p)
@@ -90,23 +91,23 @@ class MailSession:
     MASKLEN = 5
 
     def __init__(self, account):
-        Log.verbose(1, "Connect to IMAP server: " + account['host'])
+        Log.verbose(2, "Connect to IMAP server: " + account['host'])
         self.session = imaplib.IMAP4_SSL(account['host'])
         self.session.login(account['user'], account['pass'])
-        Log.verbose(3, "Connect to IMAP server: success")
+        Log.verbose(6, "Connect to IMAP server: success")
 
     def read_folder(self, folder_name = 'INBOX'):
 
-        Log.verbose(3, "Select IMAP folder: " + folder_name)
+        Log.verbose(4, "Select IMAP folder: " + folder_name)
         #pprint(self.session.list())  # ..rv, folders
         self.session.select(folder_name)
 
-        Log.verbose(3, "Search unseen messages")
+        Log.verbose(6, "Search unseen messages")
         rv, msgids = self.session.search(None, '(UNSEEN)')
         msgids = msgids[0].split()  #..string containing numeric ids => return as array
         msgs = []
 
-        Log.verbose(3, "Fetch %d message headers" % (len(msgids)))
+        Log.verbose(2, "Fetch %d message headers" % (len(msgids)))
         for msgid in msgids:
             Log.verbose(5, "Fetch message header: " + str(msgid))
             rv,data = self.session.fetch(msgid, '(RFC822)')
@@ -201,8 +202,11 @@ class MailSession:
         if not self.any_attachment_match(msg, rule['suffix'], rule['mask']):
             return False
 
-        Log.verbose(1, "Fetch message \"%s\" from \"%s\" by rule \"%s\"" %
-                      ( msg['Subject'] if msg['Subject'] else 'NOSUBJ',
+        msgid = msg['__MSGID__']
+
+        Log.verbose(1, "Fetch message %s: \"%s\" from \"%s\" by rule \"%s\"" %
+                      ( msgid,
+                        msg['Subject'] if msg['Subject'] else 'NOSUBJ',
                         msg['From'   ] if msg['From'   ] else 'NOFROM',
                         rule['name'] ) )
 
@@ -226,8 +230,8 @@ class MailSession:
 
             dest.putfile(os.path.join(msgdir, filename), data)
 
-        Log.verbose(3, "Set flag to message: " + msg['__MSGID__'])
-        self.session.store(msg['__MSGID__'], '+FLAGS', '\\Flagged')
+        Log.verbose(3, "Set flag to message: " + msgid)
+        self.session.store(msgid, '+FLAGS', '\\Flagged')
 
         return True
 
@@ -305,14 +309,14 @@ class ImapMover:
 
     def read_config(self, cfgfile):
 
-        Log.verbose(1, "Read config from " + cfgfile)
+        Log.verbose(2, "Read config: " + cfgfile)
         fd = open(cfgfile, 'r')
         cfg = yaml.load(fd)
 
         self.mail_accounts = self.read_section(cfgfile, cfg, 'mail_accounts', ['host','user','pass'])
         self.filter_rules  = self.read_section(cfgfile, cfg, 'filter_rules' , ['from','suffix','mask','dest_folder'])
         self.destinations  = self.read_destinations(cfgfile, cfg)
-        Log.verbose(3, "Read config from " + cfgfile + ": done.")
+        Log.verbose(6, "Read config: done")
 
     def run(self):
 
