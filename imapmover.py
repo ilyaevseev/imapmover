@@ -7,11 +7,20 @@ import os
 import sys
 import errno
 import time
+
+# Parse configuration file:
 import yaml
+
+# Read emails from IMAP mailbox:
 import imaplib
 import email
 import email.header
 import email.utils
+
+# Store parsed emails to Dropbox:
+import dropbox
+from dropbox.exceptions import ApiError
+
 
 class Log:
 
@@ -33,19 +42,19 @@ class Log:
         print("<%d> %s" % (level, msg))
 
 class Destination:
-    pass
-
-class LocalDestination(Destination):
+    """Abstract base class"""
 
     topdir = '.'
-
-    def __init__(self, args = None, hint = None):
-        topdir = args['top'] if (args and ('top' in args)) else '.'
-        self.topdir = os.getcwd() if (not topdir or topdir == '.') else topdir
 
     def path2full(self, path):
         p = path[1:] if path[0] == os.sep else path
         return os.path.join(self.topdir, p)
+
+class LocalDestination(Destination):
+
+    def __init__(self, args = None, hint = None):
+        topdir = args['top'] if (args and ('top' in args)) else '.'
+        self.topdir = os.getcwd() if (not topdir or topdir == '.') else topdir
 
     def mkdir(self, dirpath):
         p = self.path2full(dirpath)
@@ -74,16 +83,40 @@ class LocalDestination(Destination):
 class DropboxDestination(Destination):
 
     token = None
-    topdir = '/'
+    dbx   = None
 
     def __init__(self, args, hint):
-        pass
+
+        topdir = args['top'] if (args and ('top' in args)) else '/'
+        self.topdir = '/' if (not topdir or topdir == '.') else topdir
+
+        if not args or not 'token' in args:
+            raise LookupError("missing \"token\" field for dropbox destination")
+
+        Log.verbose(2, "Connect to dropbox")
+        self.dbx = dropbox.Dropbox(args['token'])
+        Log.verbose(6, "Connect to dropbox: success")
 
     def mkdir(self, dirpath):
-        pass
+
+        p = self.path2full(dirpath)
+        try:
+            self.dbx.files_create_folder(p)
+            Log.verbose(2, "Dropbox folder created: " + p)
+        except ApiError as e:
+            Log.verbose(2, "Cannot create dropbox folder, may be already exist: " + p)
+            #pprint(e)
 
     def putfile(self, filepath, data):
-        pass
+
+        p = self.path2full(filepath)
+        try:
+            Log.verbose(2, "Write file to dropbox: " + p)
+            self.dbx.files_upload(data, p)
+            return True
+        except ApiError as e:
+            Log.verbose(2, "Cannot create dropbox file: " + p)
+            return False
 
 class MailSession:
 
