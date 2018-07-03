@@ -1,0 +1,139 @@
+#!/usr/bin/env make -f
+
+GIT_BRANCH := $(shell git symbolic-ref --short HEAD)
+GIT_VER_COUNT := $(shell git rev-list --no-merges --count HEAD)
+GIT_VER_HASH := $(shell git rev-parse --short=8 HEAD)
+GIT_VER_STATUS := $(if $(shell git status --porcelain),_local,)
+
+VERSION := $(RELEASE)-$(GIT_VER_COUNT)-$(GIT_VER_HASH)$(GIT_VER_STATUS)
+
+BRANCH_NAME.develop := dev
+BRANCH_NAME.$(GIT_BRANCH) ?= $(subst _,-,$(subst /,-,$(GIT_BRANCH)))
+
+REPO := registry.mtxc.co
+
+IMAGE := $(REPO)/$(NAME)$(if $(subst master,,$(GIT_BRANCH)),-$(BRANCH_NAME.$(GIT_BRANCH)))
+IMAGE_BUILD := $(IMAGE)-build
+
+ifeq (,$(TEST_TARGET))
+TEST_TARGET := build
+IMAGE_TEST := $(IMAGE_BUILD)
+else
+IMAGE_TEST := $(IMAGE)-test
+endif
+
+SERVICE_NAME := $(NAME)
+SERVICE_NAME_BUILD := $(NAME)-build
+SERVICE_NAME_TEST := $(NAME)-test
+
+DOCKER_COMPOSE_ARGS := --rm --service-ports
+DOCKER_COMPOSE_RUN := $(DOCKER_COMPOSE_ARGS) --name $(SERVICE_NAME)
+DOCKER_COMPOSE_RUN_BUILD := $(DOCKER_COMPOSE_ARGS) --name $(SERVICE_NAME_BUILD)
+DOCKER_COMPOSE_RUN_TEST := $(DOCKER_COMPOSE_ARGS) --name $(SERVICE_NAME_TEST)
+
+ifeq ($(GIT_BRANCH),master)
+DOCKER_BUILD_ARGS += --build-arg DEPLOY_ENV=production
+else ifeq ($(GIT_BRANCH),staging)
+DOCKER_BUILD_ARGS += --build-arg DEPLOY_ENV=staging
+else
+DOCKER_BUILD_ARGS += --build-arg DEPLOY_ENV=development
+endif
+
+#DOCKER_BUILD_ARGS += --pull
+
+DOCKER_TEST_ARGS ?= $(DOCKER_BUILD_ARGS)
+DOCKER_IMAGE_ARGS ?= $(DOCKER_BUILD_ARGS)
+
+HOSTNAME := $(shell hostname -f)
+HOSTADDR := $(shell ping -q -c1 "$(HOSTNAME)" | awk -F '[()]' '/^PING / { print $$2; exit 0; }')
+
+default: image
+
+help:
+	@echo ""
+	@echo "# Development"
+	@echo "###############"
+	@echo "make build       - create build image"
+	@echo "make build-run   - run service in build container"
+	@echo "make build-shell - run shell in build container"
+	@echo ""
+	@echo "# Test"
+	@echo "###############"
+	@echo "make test       - run tests in build container"
+	@echo ""
+	@echo "# Production"
+	@echo "###############"
+	@echo "make image       - create production images"
+	@echo "make shell       - run shell in production container"
+	@echo "make run         - run service in production container"
+	@echo ""
+	@echo "# Utility"
+	@echo "###############"
+	@echo "make clean       - remove containers and images"
+	@echo ""
+
+init:
+	@echo "IMAGE: $(IMAGE):$(VERSION)"
+	@echo "$(VERSION)" > version.txt
+	@git log --no-merges --date=short --pretty='tformat:%ad %an <%ae>%x00%s' \
+	  | gawk -F '\0' 'BEGIN { prefix=""; }; { if ( $$1 != prefix ) { printf "\n\n%s\n\n", $$1; prefix=$$1; }; printf " * %s\n", $$2 }' \
+	  | sed -e '1,2d' > changelog.txt
+	@{ echo "VERSION=$(VERSION)" ; \
+	   echo "IMAGE=$(IMAGE)" ; \
+	   echo "IMAGE_BUILD=$(IMAGE_BUILD)" ; \
+	   echo "IMAGE_TEST=$(IMAGE_TEST)" ; \
+	   echo "HOSTNAME=$(HOSTNAME)" ; \
+	   echo "HOSTADDR=$(HOSTADDR)" ; } > .env
+
+build: init
+	docker build $(DOCKER_BUILD_ARGS) -f Dockerfile --target build -t $(IMAGE_BUILD):$(VERSION) .
+	docker image ls --no-trunc --format "IMAGE_BUILD_ID={{.ID}}" $(IMAGE_BUILD):$(VERSION) >> .env
+
+build-run: build
+	docker-compose run $(DOCKER_COMPOSE_RUN_BUILD) $(SERVICE_NAME_BUILD) ; \
+	docker-compose down
+
+build-shell: build
+	docker-compose run $(DOCKER_COMPOSE_RUN_BUILD) $(SERVICE_NAME_BUILD) /bin/bash ; \
+	docker-compose down
+
+ifneq ($(TEST_CMD),)
+test: init
+	docker build $(DOCKER_TEST_ARGS) -f Dockerfile --target $(TEST_TARGET) -t $(IMAGE_TEST):$(VERSION) .
+	docker image ls --no-trunc --format "IMAGE_TEST_ID={{.ID}}" $(IMAGE_TEST):$(VERSION) >> .env
+	docker-compose run $(DOCKER_COMPOSE_RUN_TEST) $(SERVICE_NAME_TEST) $(TEST_CMD) ; \
+	docker-compose down
+else
+test: init
+	@echo "No tests defined"
+endif
+
+image: test
+	docker build $(DOCKER_IMAGE_ARGS) -t $(IMAGE):$(VERSION) -t $(IMAGE):latest -f Dockerfile .
+	docker image ls --no-trunc --format "IMAGE_ID={{.ID}}" $(IMAGE):$(VERSION) >> .env
+
+run: image
+	docker-compose run $(DOCKER_COMPOSE_RUN) $(SERVICE_NAME) ; \
+	docker-compose down
+
+shell: image
+	docker-compose run $(DOCKER_COMPOSE_RUN) $(SERVICE_NAME) /bin/bash ; \
+	docker-compose down
+
+push:
+ifneq ($(GIT_VER_STATUS),)
+	$(error Cannot push non-clean build)
+endif
+	docker push $(IMAGE):$(VERSION)
+	docker push $(IMAGE):latest
+
+clean:
+	-docker-compose rm --force --stop -v
+	-docker ps --all --quiet --no-trunc --filter 'name=^/$(SERVICE_NAME)$$' | xargs docker rm 2> /dev/null
+	-docker ps --all --quiet --no-trunc --filter 'name=^/$(SERVICE_NAME_TEST)$$' | xargs docker rm 2> /dev/null
+	-docker ps --all --quiet --no-trunc --filter 'name=^/$(SERVICE_NAME_BUILD)$$' | xargs docker rm 2> /dev/null
+	-docker image ls --format '{{.Repository}}:{{.Tag}}' '$(IMAGE)' | xargs docker rmi 2> /dev/null
+	-docker image ls --format '{{.Repository}}:{{.Tag}}' '$(IMAGE_TEST)' | xargs docker rmi 2> /dev/null
+	-docker image ls --format '{{.Repository}}:{{.Tag}}' '$(IMAGE_BUILD)' | xargs docker rmi 2> /dev/null
+	-docker image prune -f
+

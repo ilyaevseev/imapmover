@@ -1,0 +1,17 @@
+version: '2.2'
+
+services:
+
+  imap-mover:
+    image: "${IMAGE_ID:-none}"
+    hostname: imap-mover
+    container_name: imap-mover
+    volumes:
+      - ./imapmover.yml:/opt/app/config/imapmover.yml
+
+  imap-mover-build:
+    image: "${IMAGE_BUILD_ID:-none}"
+    hostname: imap-mover-build
+    container_name: imap-mover-build
+    volumes:
+      - ./imapmover.yml:/opt/app/config/imapmover.yml

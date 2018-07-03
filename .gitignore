@@ -1,3 +1,7 @@
 temp*
 tmp*
 *tmp
+/**/__pycache__/
+/.env
+/version.txt
+/changelog.txt
