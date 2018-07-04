@@ -316,6 +316,7 @@ class ImapMover:
             if not 'mask' in rule and not 'dest_folder' in rule:
                 raise LookupError("missing \"dest_folder\" or \"mask\" in rule \"%s\" in \"%s\"" %
                                    (rule['name'], cfgfile))
+        return rules
 
     def read_destinations(self, cfgfile, cfg):
 
