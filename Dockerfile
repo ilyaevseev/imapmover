@@ -1,7 +1,7 @@
 #
 # Build image
 #
-FROM python:3.6-slim-stretch as python
+FROM python:3.7-slim-stretch as python
 
 ENV LANG=C.UTF-8 
 ENV DEBIAN_FRONTEND=noninteractive
