@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+dropbox = "*"
+
+[dev-packages]
+
+[packages.PyYAML]
+git = "https://github.com/yaml/pyyaml.git"
+ref = "release/4.2"
