@@ -47,7 +47,6 @@ pipeline {
     stage('Build') {
       steps {
         sh 'make image'
-        }
       }
       options {
         ansiColor('vga')
