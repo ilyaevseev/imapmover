@@ -232,8 +232,9 @@ class MailSession:
         if not self.email_addr_match(msg['From'], rule['from']):
             return False
 
-        if not self.any_attachment_match(msg, rule['suffix'], rule['mask']):
-            return False
+        if 'mask' in rule:
+            if not self.any_attachment_match(msg, rule['suffix'], rule['mask']):
+                return False
 
         msgid = msg['__MSGID__']
 
@@ -308,6 +309,14 @@ class ImapMover:
 
         return result
 
+    def read_filter_rules(self, cfgfile, cfg):
+
+        rules = self.read_section(cfgfile, cfg, 'filter_rules' , ['from','suffix'])
+        for rule in rules:
+            if not 'mask' in rule and not 'dest_folder' in rule:
+                raise LookupError("missing \"dest_folder\" or \"mask\" in rule \"%s\" in \"%s\"" %
+                                   (rule['name'], cfgfile))
+
     def read_destinations(self, cfgfile, cfg):
 
         secname = 'destinations'
@@ -347,7 +356,7 @@ class ImapMover:
         cfg = yaml.load(fd)
 
         self.mail_accounts = self.read_section(cfgfile, cfg, 'mail_accounts', ['host','user','pass'])
-        self.filter_rules  = self.read_section(cfgfile, cfg, 'filter_rules' , ['from','suffix','mask','dest_folder'])
+        self.filter_rules  = self.read_filter_rules(cfgfile, cfg)
         self.destinations  = self.read_destinations(cfgfile, cfg)
         Log.verbose(6, "Read config: done")
 
