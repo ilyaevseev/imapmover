@@ -1,7 +1,7 @@
 #
 # Build image
 #
-FROM python:3.6-slim-stretch as python
+FROM python:2.7-slim-stretch as python
 
 ENV LANG=C.UTF-8 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -53,4 +53,4 @@ WORKDIR /opt/app
 
 CMD [ "/usr/local/bin/python", "imapmover.py", "config/imapmover.yml" ]
 
-# vim: set filetype=dockerfile:
+# vim: set filetype=dockerfile tabstop=4 softtabstop=4 shiftwidth=4 expandtab:
