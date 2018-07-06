@@ -33,7 +33,7 @@ class Log:
         if not 'VERBOSE' in os.environ: return
         val = os.environ['VERBOSE']
         if not val.isdigit(): return
-        Log.__level = val
+        Log.__level = int(val)
 
     @staticmethod
     def verbose(level, msg):
