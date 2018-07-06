@@ -145,7 +145,7 @@ class MailSession:
             Log.verbose(5, "Fetch message header: " + str(msgid))
             rv,data = self.session.fetch(msgid, '(RFC822)')
             txt = data[0][1]
-            msg = email.message_from_string(txt)
+            msg = email.message_from_bytes(txt) if callable(getattr(email,"message_from_bytes", None)) else email.message_from_string(txt)
             msg.__setitem__('__MSGID__', msgid)
             msgs.append(msg);
 
