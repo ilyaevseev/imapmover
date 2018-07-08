@@ -222,7 +222,7 @@ class MailSession:
         Log.verbose(6, "Use destination: " + destname)
         return destinations[destname]
 
-    def try_rule(self, msg, rule, destinations):
+    def try_rule(self, msg, rule, destinations, dry_run = False):
         """
         Try to match message against rule.
         On success, move message to IMAP folder selected by rule, and return True.
@@ -247,7 +247,8 @@ class MailSession:
         msgdir = rule['dest_folder'] if 'dest_folder' in rule else self.build_dirname(msg['Subject'], rule['mask'])
 
         dest = self.get_destination(rule, destinations)
-        dest.mkdir(msgdir)
+        if not dry_run:
+            dest.mkdir(msgdir)
 
         n = 0
         for part in msg.walk():
@@ -262,10 +263,16 @@ class MailSession:
                 filename = "part%d.%s" % ( n, self.build_filename_suffix(part) )
             filename = '%s__%s' % ( self.build_timestamp(msg['Date']), filename )
 
-            dest.putfile(os.path.join(msgdir, filename), data)
+            if dry_run:
+                Log.verbose(1, "Store file: " + filename)
+            else:
+                dest.putfile(os.path.join(msgdir, filename), data)
 
-        Log.verbose(3, "Set flag to message: " + msgid)
-        self.session.store(msgid, '+FLAGS', '\\Flagged')
+        if dry_run:
+            self.session.store(msgid, '-FLAGS', '\Seen')
+        else:
+            Log.verbose(3, "Set flag to message: " + msgid)
+            self.session.store(msgid, '+FLAGS', '\\Flagged')
 
         return True
 
@@ -361,21 +368,24 @@ class ImapMover:
         self.destinations  = self.read_destinations(cfgfile, cfg)
         Log.verbose(6, "Read config: done")
 
-    def run(self):
+    def run(self, dry_run = False):
 
         for account in self.mail_accounts:
             session = MailSession(account)
             msgs = session.read_folder()
             for msg in msgs:
                 for rule in self.filter_rules:
-                    if session.try_rule(msg, rule, self.destinations):
+                    if session.try_rule(msg, rule, self.destinations, dry_run):
                         break  #..skip remaining rules
 
 def main():
+    dry_run = 'DRY_RUN' in os.environ
+    if dry_run: Log.verbose(0, "Run in dry mode!")
+
     mover = ImapMover()
     fname = sys.argv[1] if len(sys.argv) > 1 else os.path.splitext(os.path.basename(sys.argv[0]))[0] + '.yml'
     mover.read_config(fname)
-    mover.run()
+    mover.run(dry_run)
     Log.verbose(1, "Done.")
 
 if __name__ == "__main__":
