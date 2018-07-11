@@ -105,6 +105,7 @@ class DropboxDestination(Destination):
             Log.verbose(2, "Dropbox folder created: " + p)
         except ApiError as e:
             Log.verbose(2, "Cannot create dropbox folder, may be already exist: " + p)
+            self.dbx.files_list_folder(p)  #..will raise exception if folder not found
             #pprint(e)
 
     def putfile(self, filepath, data):
@@ -243,6 +244,15 @@ class MailSession:
                         msg['Subject'] if msg['Subject'] else 'NOSUBJ',
                         msg['From'   ] if msg['From'   ] else 'NOFROM',
                         rule['name'] ) )
+
+        try:
+            return self.exec_rule(msg, msgid, rule, destinations, dry_run)
+        except Exception as e:
+            Log.verbose(1, "Rollback message as unseen")
+            self.session.store(msgid, '-FLAGS', '\Seen')
+            raise
+
+    def exec_rule(self, msg, msgid, rule, destinations, dry_run):
 
         msgdir = rule['dest_folder'] if 'dest_folder' in rule else self.build_dirname(msg['Subject'], rule['mask'])
 
