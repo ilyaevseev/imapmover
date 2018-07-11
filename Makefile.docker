@@ -1,6 +1,6 @@
 #!/usr/bin/env make -f
 
-GIT_BRANCH := $(shell git symbolic-ref --short HEAD)
+GIT_BRANCH := $(subst refs/heads/,,$(shell git symbolic-ref HEAD))
 GIT_VER_COUNT := $(shell git rev-list --no-merges --count HEAD)
 GIT_VER_HASH := $(shell git rev-parse --short=8 HEAD)
 GIT_VER_STATUS := $(if $(shell git status --porcelain),_local,)
