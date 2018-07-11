@@ -47,6 +47,15 @@ pipeline {
     stage('Build') {
       steps {
         sh 'make image'
+        script {
+          if (fileExists("test-output/test.out")) {
+            currentBuild.result = "UNSTABLE"
+            emailBodyTestsOutput = sh(
+              returnStdout: true,
+              script: "cat test-output/test.out | ansi2html -n -w"
+            )
+          }
+        }
       }
       options {
         ansiColor('vga')
@@ -115,3 +124,4 @@ pipeline {
   }
 
 }
+// vim: set filetype=Jenkinsfile tabstop=2 softtabstop=2 shiftwidth=2 expandtab:

@@ -47,7 +47,7 @@ FROM python
 COPY --from=build /opt/python/ /opt/python/
 COPY --from=build /usr/src/app/ /opt/app/
 
-COPY changelog.txt version.txt /
+COPY changelog.txt version.txt /usr/image/
 
 WORKDIR /opt/app
 
