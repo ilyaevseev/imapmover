@@ -199,7 +199,8 @@ class MailSession:
             return mask
         if isinstance(mask,int):
             if mask <= 0: mask = 0
-            return msgsubj[mask - 1 : mask + self.MASKLEN - 1]
+            a = msgsubj[mask - 1 : mask + self.MASKLEN - 1]
+            return a.strip()
 
     def build_timestamp(self, datetimestr, format = '%Y-%m-%d-%H%M%S'):
 
