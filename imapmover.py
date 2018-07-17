@@ -161,27 +161,27 @@ class MailSession:
 
         return (actual == needed) or re.search('<' + needed + '>', actual, re.I)
 
-    def msgpart2fname(self, msgpart, fname):
+    def zip2fnames(self, msgpart, fname):
 
         if fname[-4:].upper() != '.ZIP':
-            return fname
+            return None
 
         Log.verbose(4, "Try to list ZIP content: " + fname)
 
         data = msgpart.get_payload(decode=True)
         if not data:
             Log.verbose(1, "Empty payload in ZIP file: " + fname)
-            return fname
+            return None
 
         z = zipfile.ZipFile(io.BytesIO(data))
 
         fnames = z.namelist()
         if not fnames:
             Log.verbose(1, "Empty filelist in ZIP file: " + fname)
-            return fname
+            return None
 
-        Log.verbose(4, "ZIP file contains: " + fnames[0])
-        return fnames[0]
+        Log.verbose(4, "ZIP file contains: " + ", ".join(fnames))
+        return fnames
 
     def attachment_match(self, msgpart, suffix, mask):
 
@@ -193,7 +193,20 @@ class MailSession:
         if not fname:
             return False
 
-        fname = self.msgpart2fname(msgpart, fname)
+        if self.filename_match(fname, suffix, mask):
+            return True
+
+        fnames = self.zip2fnames(msgpart, fname)
+        if not fnames:
+            return False
+
+        for fn in fnames:
+            if self.filename_match(fn, suffix, mask):
+                return True
+
+        return False
+
+    def filename_match(self, fname, suffix, mask):
 
         if not re.search('.' + suffix + '$', fname, flags = re.IGNORECASE):
             return False
@@ -415,6 +428,7 @@ class ImapMover:
             session = MailSession(account)
             msgs = session.read_folder()
             for msg in msgs:
+                Log.verbose(6, "Check message id: " + str(msg['__MSGID__']))
                 for rule in self.filter_rules:
                     if session.try_rule(msg, rule, self.destinations, dry_run):
                         break  #..skip remaining rules
