@@ -2,6 +2,7 @@
 
 from pprint import pprint
 
+import io
 import re
 import os
 import sys
@@ -16,6 +17,9 @@ import imaplib
 import email
 import email.header
 import email.utils
+
+# Read zipped attachments
+import zipfile
 
 # Store parsed emails to Dropbox:
 import dropbox
@@ -157,6 +161,28 @@ class MailSession:
 
         return (actual == needed) or re.search('<' + needed + '>', actual, re.I)
 
+    def msgpart2fname(self, msgpart, fname):
+
+        if fname[-4:].upper() != '.ZIP':
+            return fname
+
+        Log.verbose(4, "Try to list ZIP content: " + fname)
+
+        data = msgpart.get_payload(decode=True)
+        if not data:
+            Log.verbose(1, "Empty payload in ZIP file: " + fname)
+            return fname
+
+        z = zipfile.ZipFile(io.BytesIO(data))
+
+        fnames = z.namelist()
+        if not fnames:
+            Log.verbose(1, "Empty filelist in ZIP file: " + fname)
+            return fname
+
+        Log.verbose(4, "ZIP file contains: " + fnames[0])
+        return fnames[0]
+
     def attachment_match(self, msgpart, suffix, mask):
 
         typ = msgpart.get_content_maintype()
@@ -166,6 +192,8 @@ class MailSession:
         fname = msgpart.get_filename()
         if not fname:
             return False
+
+        fname = self.msgpart2fname(msgpart, fname)
 
         if not re.search('.' + suffix + '$', fname, flags = re.IGNORECASE):
             return False
@@ -230,6 +258,8 @@ class MailSession:
         On success, move message to IMAP folder selected by rule, and return True.
         Otherwise return False.
         """
+
+        Log.verbose(7, "Try rule: " + rule['name'])
 
         if not self.email_addr_match(msg['From'], rule['from']):
             return False
