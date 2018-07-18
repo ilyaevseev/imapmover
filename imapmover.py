@@ -296,6 +296,37 @@ class MailSession:
             self.session.store(msgid, '-FLAGS', '\Seen')
             raise
 
+    def save_zip(self, zipname, data, tstamp, dest, msgdir, dry_run):
+
+        if zipname[-4:].upper() != '.ZIP':
+            return False
+
+        try:
+            Log.verbose(2, "Try to extract ZIP file: " + zipname)
+            z = zipfile.ZipFile(io.BytesIO(data))
+
+            fnames = z.namelist()
+            if not fnames:
+                Log.verbose(1, "Empty filelist in ZIP file: " + zipname)
+                return False
+            Log.verbose(4, "ZIP file contains: " + ", ".join(fnames))
+
+            for fn1 in fnames:
+                fn2 = '%s__%s' % ( tstamp, fn1 )
+
+                b = z.read(fn1)
+
+                if dry_run:
+                    Log.verbose(1, "Store file: " + fn2)
+                else:
+                    dest.putfile(os.path.join(msgdir, fn2), b)
+
+            return True
+
+        except Exception as e:
+            Log.verbose(1, "Cannot extract ZIP file %s, save unextracted: %s" % ( zipname, str(e) ))
+            return False
+
     def exec_rule(self, msg, msgid, rule, destinations, dry_run):
 
         msgdir = rule['dest_folder'] if 'dest_folder' in rule else self.build_dirname(msg['Subject'], rule['mask'])
@@ -303,6 +334,8 @@ class MailSession:
         dest = self.get_destination(rule, destinations)
         if not dry_run:
             dest.mkdir(msgdir)
+
+        tstamp = self.build_timestamp(msg['Date'])
 
         n = 0
         for part in msg.walk():
@@ -315,7 +348,10 @@ class MailSession:
             if not filename:
                 n = n + 1
                 filename = "part%d.%s" % ( n, self.build_filename_suffix(part) )
-            filename = '%s__%s' % ( self.build_timestamp(msg['Date']), filename )
+            elif self.save_zip(filename, data, tstamp, dest, msgdir, dry_run):
+                continue
+
+            filename = '%s__%s' % ( tstamp, filename )
 
             if dry_run:
                 Log.verbose(1, "Store file: " + filename)
